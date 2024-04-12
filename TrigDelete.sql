@@ -61,3 +61,61 @@ select * from Stavke_predmeta
 delete from Stavke_predmeta where PredmetID=1
 
 delete from Predmet where PredmetID=1
+
+
+--------- TRIGER UPDATE --------------
+
+create TRIGGER trg_Racun_UPDATE
+ON Racun
+INSTEAD OF UPDATE
+AS
+BEGIN
+    -- Provera da li su polja primarnog ključa NULL
+    IF EXISTS (
+            SELECT 1
+            FROM inserted
+            WHERE RacunID IS NULL
+              OR PredmetID IS NULL
+            )
+    BEGIN
+        RAISERROR ('Ni jedno od polja primarnog kljuca ne sme biti NULL',12,2)
+        ROLLBACK TRANSACTION;
+        RETURN
+    END
+
+    -- Provera da li primarni ključ nije unikatan
+    IF EXISTS (SELECT 1 FROM Racun WHERE RacunID IN (SELECT RacunID FROM inserted))
+
+    BEGIN
+        RAISERROR ('Primarni kljuc nije unikatan',12,2)
+        ROLLBACK TRANSACTION;
+        RETURN
+    END
+
+    -- Provera da li postoji odgovarajući red u Predmeti tabeli za strani ključ
+    IF NOT EXISTS (SELECT 1 FROM Predmet WHERE PredmetID IN (SELECT PredmetID FROM inserted))
+    BEGIN
+        RAISERROR ('Pogresna referenca stranog kljuca PredmetID',12,2)
+        ROLLBACK TRANSACTION;
+        RETURN
+    END
+
+    -- Ažuriranje DEBIT tabele
+    UPDATE d
+    SET d.Datum = i.Datum,
+        d.PredmetID = i.PredmetID,
+        d.RacunID = i.RacunID,
+        d.Valuta = i.Valuta,
+        d.Zaduženje = i.Zaduženje
+    FROM Racun d
+    JOIN inserted i ON d.PredmetID = i.PredmetID
+
+END
+
+UPDATE Racun
+SET RacunID = 11,
+    PredmetID = 2,
+    Datum = '2024-04-21',
+    Zaduženje = 800.00,
+    Valuta = 'GBP'
+WHERE RacunID = 1;
